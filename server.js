@@ -23,13 +23,15 @@ lines = data.split('\n');   //각 줄이 배열로 들어가 있는 형태
 // #number이 500을 넘기는지 확인
 var TENto1 = false;
 for (var line = 0; line < lines.length; line++){
-    if(this_line == '#500'){
+    if(lines[line] == '#200'){
+        console.log('#200');
         TENto1 = true;
     }
 }
 
 // parsing vcd filel to WaveJSON
-var WaveJSON = { signal : [], foot : { tock: 0 } };
+var WaveJSON = { signal : [], foot : { tock: 0 } }; // 전체 JSON
+var part_JSON = { signal : [], foot : { tock: 0 } };    // 10단위로 저장한 JSON
 var nameJSON = {};  // 모든 {char : id}이 든 JSON 형태
 
 var check = false;  //#number check
@@ -53,7 +55,8 @@ function Parsing_WaveJSON(){
             
             nameJSON[char] = id;
             WaveJSON['signal'].push({"name" : id, "wave" : '', "data" : ''}); //WaveJSON에 var 저장
-    
+            part_JSON['signal'].push({"name" : id, "wave" : '', "data" : ''}); //WaveJSON에 var 저장
+
         // 2. #number
         }else if(this_line == "#0"){ //#초기값 설정 (array_가 없음)
             this_num = Number(this_line.slice(1));
@@ -62,25 +65,37 @@ function Parsing_WaveJSON(){
             check = true;
     
         }else if(check == true){    //#0이 아닌 경우
-            //(1) #number < 500
-            if(TENto1 == false){
-                readNumber();
-    
-            //(2) #number >= 500
-            }else{
+            // #number >= 500
+            if(TENto1 == true){
                 if(this_line.slice(0,1) == '#'){
                     if(this_line.slice(-1) % 10 == 0){  //10의 배수라면 (10배수가 아니면 pass)
-                        
+                        part_JSON = readNumber(part_JSON);
                     }
                 }
             }
+
+
+            //(1) #number < 500
+            // if(TENto1 == false){
+                WaveJSON = readNumber(WaveJSON);
+                // console.log(WaveJSON);
+    
+            //(2) #number >= 500
+            // }else{
+            //     if(this_line.slice(0,1) == '#'){
+            //         if(this_line.slice(-1) % 10 == 0){  //10의 배수라면 (10배수가 아니면 pass)
+            //             part_JSON = readNumber(part_JSON);
+            //         }
+            //     }
+            // }
         }
     }
-    fs.writeFileSync('WaveJSON.json', JSON.stringify(WaveJSON));    // 파일 저장
+    TENto1 == true ? fs.writeFileSync('part_JSON.json', JSON.stringify(part_JSON)) : null;    // 파일 저장
+    fs.writeFileSync('WaveJSON.json', JSON.stringify(WaveJSON))
 }
 
 
-function readNumber(){
+function readNumber(WaveJSON){
     if(this_line.slice(0,1) == '#' || this_line == ''){    //#number인 경우 (this_line == '' 마지막인 경우)
         var rpt = ".".repeat(num);
 
@@ -90,7 +105,7 @@ function readNumber(){
             if(typeof(n) == 'number'){  //n이 0인 경우(값에 변화가 없는 경우)
                 WaveJSON.signal[k].wave += rpt;
             }else{
-                rpt2 = ".".repeat(num - 1) + n;
+                var rpt2 = ".".repeat(num - 1) + n;
                 WaveJSON.signal[k].wave += rpt2;
             }
         }
@@ -105,25 +120,28 @@ function readNumber(){
         num = this_num - old_num;
 
     }else{  // wave값인 경우,
-        this_line.slice(0,1) == '$' ? null : insertWaveJSONData();
+        this_line.slice(0,1) == '$' ? null : WaveJSON = insertWaveJSONData(WaveJSON);
     }
+    return WaveJSON;
 }
 
 
-function insertWaveJSONData(){
+function insertWaveJSONData(WaveJSON){
     // b로 시작하는 경우
     if(this_line.slice(0,1) == 'b' || this_line.slice(0,1) == 'B'){
         binary = this_line.slice(1,-2);
         wave_name = parseInt(binary, 2).toString(16); // 2진수 -> 16진수
 
-        insertWaveData(1);
+        WaveJSON = insertWaveData(1, WaveJSON);
     //0 or 1 or .인 경우
     }else{        
-        insertWaveData(0);
+        WaveJSON = insertWaveData(0, WaveJSON);
     }
+    return WaveJSON;
 }
 
-function insertWaveData(ck){
+
+function insertWaveData(ck, WaveJSON){
     find_name = this_line.slice(-1);
 
     for(i in WaveJSON.signal){  //i : n번째
@@ -137,7 +155,9 @@ function insertWaveData(ck){
             ck == 1 ? WaveJSON.signal[i].data += wave_name + ' ' : null;
         }
     }
+    return WaveJSON;
 }
+
 
 
 function ChangeData(chk, tmp_wave, from, to){   //chk=0 : '.'아닌 경우, chk=1: ','인 경우
