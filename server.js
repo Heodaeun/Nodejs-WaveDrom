@@ -19,19 +19,16 @@ app.use(express.static('public')); //Send index.html page on GET /
 data = fs.readFileSync('out.vcd', 'utf-8');
 lines = data.split('\n');   //각 줄이 배열로 들어가 있는 형태
 
-
 // #number이 500을 넘기는지 확인
 var TENto1 = false;
 for (var line = 0; line < lines.length; line++){
-    if(lines[line] == '#200'){
-        console.log('#200');
+    if(this_line == '#500'){
         TENto1 = true;
     }
 }
 
 // parsing vcd filel to WaveJSON
-var WaveJSON = { signal : [], foot : { tock: 0 } }; // 전체 JSON
-var part_JSON = { signal : [], foot : { tock: 0 } };    // 10단위로 저장한 JSON
+var WaveJSON = { signal : [], foot : { tock: 0 } };
 var nameJSON = {};  // 모든 {char : id}이 든 JSON 형태
 
 var check = false;  //#number check
@@ -42,6 +39,8 @@ var waveData;   // waveData: WaveJSON의 wave에 들어갈 데이터
 
 var array_ = [];    //wave에 .을 추가하기 위해 변경되었는지 체크하는 배열 (변경되면 waveData, 아니면 0)
 
+
+var old_from = 0;   //사용자가 이전에 입력한 from 값을 저장하는 변수
 
 function Parsing_WaveJSON(){
     for (var line = 0; line < lines.length; line++) {   //한 줄씩 차례대로 읽음
@@ -55,8 +54,7 @@ function Parsing_WaveJSON(){
             
             nameJSON[char] = id;
             WaveJSON['signal'].push({"name" : id, "wave" : '', "data" : ''}); //WaveJSON에 var 저장
-            part_JSON['signal'].push({"name" : id, "wave" : '', "data" : ''}); //WaveJSON에 var 저장
-
+    
         // 2. #number
         }else if(this_line == "#0"){ //#초기값 설정 (array_가 없음)
             this_num = Number(this_line.slice(1));
@@ -65,37 +63,25 @@ function Parsing_WaveJSON(){
             check = true;
     
         }else if(check == true){    //#0이 아닌 경우
-            // #number >= 500
-            if(TENto1 == true){
+            //(1) #number < 500
+            if(TENto1 == false){
+                readNumber();
+    
+            //(2) #number >= 500
+            }else{
                 if(this_line.slice(0,1) == '#'){
                     if(this_line.slice(-1) % 10 == 0){  //10의 배수라면 (10배수가 아니면 pass)
-                        part_JSON = readNumber(part_JSON);
+                        
                     }
                 }
             }
-
-
-            //(1) #number < 500
-            // if(TENto1 == false){
-                WaveJSON = readNumber(WaveJSON);
-                // console.log(WaveJSON);
-    
-            //(2) #number >= 500
-            // }else{
-            //     if(this_line.slice(0,1) == '#'){
-            //         if(this_line.slice(-1) % 10 == 0){  //10의 배수라면 (10배수가 아니면 pass)
-            //             part_JSON = readNumber(part_JSON);
-            //         }
-            //     }
-            // }
         }
     }
-    TENto1 == true ? fs.writeFileSync('part_JSON.json', JSON.stringify(part_JSON)) : null;    // 파일 저장
-    fs.writeFileSync('WaveJSON.json', JSON.stringify(WaveJSON))
+    fs.writeFileSync('WaveJSON.json', JSON.stringify(WaveJSON));    // 파일 저장
 }
 
 
-function readNumber(WaveJSON){
+function readNumber(){
     if(this_line.slice(0,1) == '#' || this_line == ''){    //#number인 경우 (this_line == '' 마지막인 경우)
         var rpt = ".".repeat(num);
 
@@ -105,7 +91,7 @@ function readNumber(WaveJSON){
             if(typeof(n) == 'number'){  //n이 0인 경우(값에 변화가 없는 경우)
                 WaveJSON.signal[k].wave += rpt;
             }else{
-                var rpt2 = ".".repeat(num - 1) + n;
+                rpt2 = ".".repeat(num - 1) + n;
                 WaveJSON.signal[k].wave += rpt2;
             }
         }
@@ -120,28 +106,25 @@ function readNumber(WaveJSON){
         num = this_num - old_num;
 
     }else{  // wave값인 경우,
-        this_line.slice(0,1) == '$' ? null : WaveJSON = insertWaveJSONData(WaveJSON);
+        this_line.slice(0,1) == '$' ? null : insertWaveJSONData();
     }
-    return WaveJSON;
 }
 
 
-function insertWaveJSONData(WaveJSON){
+function insertWaveJSONData(){
     // b로 시작하는 경우
     if(this_line.slice(0,1) == 'b' || this_line.slice(0,1) == 'B'){
         binary = this_line.slice(1,-2);
         wave_name = parseInt(binary, 2).toString(16); // 2진수 -> 16진수
 
-        WaveJSON = insertWaveData(1, WaveJSON);
+        insertWaveData(1);
     //0 or 1 or .인 경우
     }else{        
-        WaveJSON = insertWaveData(0, WaveJSON);
+        insertWaveData(0);
     }
-    return WaveJSON;
 }
 
-
-function insertWaveData(ck, WaveJSON){
+function insertWaveData(ck){
     find_name = this_line.slice(-1);
 
     for(i in WaveJSON.signal){  //i : n번째
@@ -155,9 +138,7 @@ function insertWaveData(ck, WaveJSON){
             ck == 1 ? WaveJSON.signal[i].data += wave_name + ' ' : null;
         }
     }
-    return WaveJSON;
 }
-
 
 
 function ChangeData(chk, tmp_wave, from, to){   //chk=0 : '.'아닌 경우, chk=1: ','인 경우
@@ -170,23 +151,23 @@ function ChangeData(chk, tmp_wave, from, to){   //chk=0 : '.'아닌 경우, chk=
                 order += 2;
             }
         }
-        console.log('order: ', order);
-        console.log('order data: ', WaveJSON.signal[i].data[order]);
+        // console.log('order: ', order);
+        // console.log('order data: ', WaveJSON.signal[i].data[order]);
         order = chk == 0 ? order : order-2;
         data += WaveJSON.signal[i].data[order] + ' ';
 
         for(l = from; l <= to; l++){
-            console.log('l: ',l);
-            console.log(WaveJSON.signal[i].wave[l]);
+            // console.log('l: ',l);
+            // console.log(WaveJSON.signal[i].wave[l]);
 
             if(WaveJSON.signal[i].wave[l] == '2'){
-                console.log('==2');
+                // console.log('==2');
                 order += 2;
                 data += WaveJSON.signal[i].data[order] + ' ';
             }
         }
-        WaveJSON.signal[i].data = data; 
-        WaveJSON.foot.tock = from;
+        WaveJSON.signal[i].data = data;
+        // WaveJSON.foot.tock = from;
     }
 }
 
@@ -207,9 +188,9 @@ io.on('connection', (socket) => {
 
     // slicing wave data
     socket.on('send_button', (from, to) => {
-        from = parseInt(from), to = parseInt(to);
         console.log('button is pushed. (from: ', from, ', to: ', to, ')');
-        // console.log('from: ', from, ', to: ', to);
+        var new_from = parseInt(from);
+        from = parseInt(from) - old_from, to = parseInt(to) - old_from;
 
         for(i = 0; i < WaveJSON.signal.length; i++){ // wave[from]이 '.'인지 확인
             var tmp_wave = WaveJSON.signal[i].wave[from];
@@ -234,6 +215,7 @@ io.on('connection', (socket) => {
                 WaveJSON.signal[i].wave = WaveJSON.signal[i].wave.slice(parseInt(from), parseInt(to)+1);
             }
         }
+        WaveJSON.foot.tock = new_from;
         console.log('wavejson: ', WaveJSON);
         fs.writeFileSync('sliced_WaveJSON.json', JSON.stringify(WaveJSON));
 
@@ -241,10 +223,14 @@ io.on('connection', (socket) => {
         fs.writeFileSync('public/index.html', html);    // 파일 저장
 
         io.emit('reload');
+
+        old_from = from;
     });
 
 
     socket.on('reset_button', () => {
+        old_from = 0;
+
         fs.readFile('WaveJSON.json', 'utf8', function (err, data) {
             if(err) throw err;
             WaveJSON = JSON.parse(data);
